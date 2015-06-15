@@ -3,56 +3,113 @@
 
 #define DS2482_I2C_ADDRESS 0x18
 
+#define DS18S20_ID 0x10
+#define DS18B20_ID 0x28
+
 DS2482 ds(0);
 
 void setup()
 {
   Wire.begin(0x2f);
   Serial.begin(9600);
-  
+
   ds.reset();
 }
 
 byte result;
 
+// oneWire address
+byte addr[8];
+// holds DS18B20 scratchpad
+byte scratchPad[9];
+
+// used to calculate the temperature
+int otemp;
+// holds the temperature reading
+float temp;
+
 void loop()
 {
-   byte addr[8];
+    while (!ds.wireReset())
+    {
+        delay(5);
+    }
 
-   if (ds.wireSearch(addr))
-   {
-     Serial.print("Found device at: ");
-     for(int i = 0; i < 8; i++)
-     {
-       Serial.print(addr[i], HEX);
-       Serial.print(" ");
-     }
-     Serial.print("\n");
-   }
-   else
-   {
-       Serial.print("No more addresses.\n");
-       delay(5000);
-       ds.wireResetSearch();
-       return;
-   }
-  
-  
-  /*
-  Wire.beginTransmission(DS2482_I2C_ADDRESS);
-  Wire.write(0xb4); // reset
-  Wire.endTransmission();
-  delay(500);
-  Wire.beginTransmission(DS2482_I2C_ADDRESS);
-  Wire.write(0xe1); // read register
-  Wire.write(0xc3); // configuration register
-  Wire.requestFrom(DS2482_I2C_ADDRESS,1);
-  result = Wire.read();
-//  Wire.endTransmission();
-  
-  Serial.write(result);
-  
-  delay(1000);
-  
-  */
+    Serial.print("Starting temperature conversion\n");
+
+    // SKIP ROM, select all OneWire devices
+    ds.wireWriteByte(0xCC);
+    // Instruct DS18B20s to convert temperature value
+    ds.wireWriteByte(0x44);
+
+    // we need to wait for the conversion to finish.
+    // no idea how much time passes, so lets wait a while
+    delay(750);
+
+    while (ds.wireSearch(addr))
+    {
+        Serial.print("Found device at: ");
+        for (int i = 0; i < 8; i++)
+        {
+            Serial.print(addr[i], HEX);
+            Serial.print(" ");
+        }
+        Serial.print("\n");
+
+        if (addr[0] == DS18S20_ID)
+        {
+            Serial.print("DS18S20: 1-Wire Parasite-Power Digital Thermometer\n");
+        }
+        else if(addr[0] == DS18B20_ID)
+        {
+            Serial.print("DS18B20: Programmable Resolution 1-Wire Digital Thermometer\n");
+        }
+        
+        // Only try to read out DS18S20 or DS18B20 devices
+        if (addr[0] == DS18S20_ID || addr[0] == DS18B20_ID)
+        {
+            // we got an address, let's do some temperature reading
+            if (ds.wireReset())
+            {
+                ds.wireSelect(addr);
+                // Instruct DS18B20 to send scratchpad
+                ds.wireWriteByte(0xBE);
+                // Read scratchpad
+                for (int j = 0; j < 9; j++)
+                {
+                    scratchPad[j] = ds.wireReadByte();
+                }
+
+                otemp = ((scratchPad[1] << 8) + scratchPad[0]);
+
+                // check for negative temperatures
+                if (otemp > 2047)
+                {
+                    // convert 2s complement negative number
+                    otemp = -(~(otemp - 1));
+                }
+                
+                if (addr[0] == DS18S20_ID)
+                {
+                    temp = otemp / 2.0;
+                }
+                else if(addr[0] == DS18B20_ID)
+                {
+                    temp = otemp / 16.0;
+                }
+                
+                Serial.print("Temperature: ");
+                Serial.print(temp);
+                Serial.print(" C\n\n");
+            }
+        }
+        else
+        {
+            Serial.print("Not a compatible OneWire device");
+        }
+    }
+    
+    Serial.print("\nNo more addresses, starting over..\n\n");
+    delay(5000);
+    ds.wireResetSearch();
 }
