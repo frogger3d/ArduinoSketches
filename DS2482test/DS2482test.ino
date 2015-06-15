@@ -16,18 +16,6 @@ void setup()
   ds.reset();
 }
 
-byte result;
-
-// oneWire address
-byte addr[8];
-// holds DS18B20 scratchpad
-byte scratchPad[9];
-
-// used to calculate the temperature
-int otemp;
-// holds the temperature reading
-float temp;
-
 void loop()
 {
     while (!ds.wireReset())
@@ -46,12 +34,17 @@ void loop()
     // no idea how much time passes, so lets wait a while
     delay(750);
 
+    // oneWire address
+    byte addr[8];
+    
     while (ds.wireSearch(addr))
     {
         Serial.print("Found device at: ");
         for (int i = 0; i < 8; i++)
         {
-            Serial.print(addr[i], HEX);
+            char hex[2];
+            sprintf (hex, "%02x", addr[i]);
+            Serial.print(hex);
             Serial.print(" ");
         }
         Serial.print("\n");
@@ -74,13 +67,18 @@ void loop()
                 ds.wireSelect(addr);
                 // Instruct DS18B20 to send scratchpad
                 ds.wireWriteByte(0xBE);
-                // Read scratchpad
+
+                // holds DS18x20 scratchpad
+                byte scratchPad[9];
+
+                // Read scratchpad                
                 for (int j = 0; j < 9; j++)
                 {
                     scratchPad[j] = ds.wireReadByte();
                 }
 
-                otemp = ((scratchPad[1] << 8) + scratchPad[0]);
+                int otemp = ((scratchPad[1] << 8) + scratchPad[0]);
+                float temp;
 
                 // check for negative temperatures
                 if (otemp > 2047)
