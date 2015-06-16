@@ -10,6 +10,7 @@ DS2482 ds(0);
 
 void setup()
 {
+  pinMode(13, OUTPUT);
   Wire.begin(0x2f);
   Serial.begin(9600);
 
@@ -23,7 +24,7 @@ void loop()
         delay(5);
     }
 
-    Serial.print("Starting temperature conversion\n");
+    Serial.print("Starting temperature conversion ..\n\n");
 
     // SKIP ROM, select all OneWire devices
     ds.wireWriteByte(0xCC);
@@ -64,41 +65,11 @@ void loop()
             // we got an address, let's do some temperature reading
             if (ds.wireReset())
             {
-                ds.wireSelect(addr);
-                // Instruct DS18B20 to send scratchpad
-                ds.wireWriteByte(0xBE);
-
-                // holds DS18x20 scratchpad
-                byte scratchPad[9];
-
-                // Read scratchpad                
-                for (int j = 0; j < 9; j++)
-                {
-                    scratchPad[j] = ds.wireReadByte();
-                }
-
-                int otemp = ((scratchPad[1] << 8) + scratchPad[0]);
-                float temp;
-
-                // check for negative temperatures
-                if (otemp > 2047)
-                {
-                    // convert 2s complement negative number
-                    otemp = -(~(otemp - 1));
-                }
-                
-                if (addr[0] == DS18S20_ID)
-                {
-                    temp = otemp / 2.0;
-                }
-                else if(addr[0] == DS18B20_ID)
-                {
-                    temp = otemp / 16.0;
-                }
-                
-                Serial.print("Temperature: ");
-                Serial.print(temp);
-                Serial.print(" C\n\n");
+                readSensor(addr);
+            }
+            else
+            {
+                Serial.print("Could not read, OneWire bus busy");
             }
         }
         else
@@ -107,7 +78,82 @@ void loop()
         }
     }
     
-    Serial.print("\nNo more addresses, starting over..\n\n");
-    delay(5000);
+    Serial.print("No more addresses, starting over ..\n\n");    
     ds.wireResetSearch();
+    
+    ledWait(5000);    
 }
+
+void readSensor(byte* addr)
+{
+    ds.wireSelect(addr);
+    // Instruct DS18B20 to send scratchpad
+    ds.wireWriteByte(0xBE);
+  
+    // holds DS18x20 scratchpad
+    byte scratchPad[9];
+  
+    // Read scratchpad                
+    for (int j = 0; j < 9; j++)
+    {
+        scratchPad[j] = ds.wireReadByte();
+    }
+  
+    float temp = convertTemperature(addr[0], scratchPad);
+    
+    Serial.print("Temperature: ");
+    Serial.print(temp);
+    Serial.print(" C\n\n");
+}
+
+float convertTemperature(byte onewireFamily, byte* scratchPad)
+{
+    int otemp = ((scratchPad[1] << 8) + scratchPad[0]);
+    float temp;
+  
+    // check for negative temperatures
+    if (otemp > 2047)
+    {
+        // convert 2s complement negative number
+        otemp = -(~(otemp - 1));
+    }
+    
+    if (onewireFamily == DS18S20_ID)
+    {
+        temp = otemp / 2.0;
+    }
+    else if(onewireFamily == DS18B20_ID)
+    {
+        temp = otemp / 16.0;
+    }
+    return temp;
+}
+
+void ledWait(int milliseconds)
+{
+    bool low = true;
+    while (milliseconds > 0)
+    {
+        if (low)
+        {
+          digitalWrite(13, HIGH);
+        }
+        else
+        {
+          digitalWrite(13, LOW);
+        }
+        low = !low;
+
+        if (milliseconds > 500)
+        {
+            delay(500);
+        }
+        else
+        {
+            delay(milliseconds);
+        }
+        milliseconds -= 1000;
+    }    
+    digitalWrite(13, LOW);
+}
+
